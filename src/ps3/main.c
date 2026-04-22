@@ -27,12 +27,12 @@ int main(int argc, char* argv[]) {
     (void)argv;
     printf("Butterscotch PS3 - Starting\n");
 
-    const char* dataWinPath = "dev_hdd0/game/BUTTER001/USRDIR/DATA.WIN";
-    const char* configJsonPath = "dev_hdd0/game/BUTTER001/USRDIR/CONFIG.JSN";
+    const char* dataWinPath = "dev_hdd0/game/DELTARPS3/USRDIR/DATA.WIN";
+    const char* configJsonPath = "dev_hdd0/game/DELTARPS3/USRDIR/CONFIG.JSN";
 
     // ===[ Load CONFIG.JSN ]===
     FILE* configFile = fopen(configJsonPath, "rb");
-    JsonValue* configRoot = nullptr;
+    JsonValue* configRoot = NULL;
 
     if (configFile != NULL) {
         fseek(configFile, 0, SEEK_END);
@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
         free(configJsonText);
     }
 
-    if (configRoot == nullptr) {
+    if (configRoot == NULL) {
         printf("CONFIG.JSN invalid or not found!\n");
         return 1;
     }
@@ -71,7 +71,7 @@ int main(int argc, char* argv[]) {
         }
     );
 
-    if (dataWin == nullptr) {
+    if (dataWin == NULL) {
         printf("Failed to parse data.win!\n");
         return 1;
     }
