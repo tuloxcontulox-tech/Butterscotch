@@ -264,6 +264,14 @@ elseif(PLATFORM STREQUAL "ps2")
                 ${CMAKE_SOURCE_DIR}/ps2dev-headers/gcc-include
         )
     endif()
+elseif(PLATFORM STREQUAL "ps3")
+    add_compile_definitions(PLATFORM_PS3)
+    # PS3 specific build logic would go here, but for now we just define the sources
+    # In a real environment, you'd link against the PS3 SDK libraries
+    add_compile_definitions(USE_FLOAT_REALS)
+    add_compile_definitions(NO_RVALUE_INT64)
+
+    target_link_libraries(butterscotch m)
 else()
     message(FATAL_ERROR "Unknown platform! ${PLATFORM}")
 endif()
