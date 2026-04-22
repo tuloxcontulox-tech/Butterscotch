@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|PS3">
+      <Configuration>Debug</Configuration>
+      <Platform>PS3</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|PS3">
+      <Configuration>Release</Configuration>
+      <Platform>PS3</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A1B2C3D4-E5F6-4321-8765-0987654321AB}</ProjectGuid>
+    <Keyword>PS3Proj</Keyword>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|PS3'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v110</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|PS3'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v110</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|PS3'">
+    <ClCompile>
+      <PreprocessorDefinitions>_DEBUG;PLATFORM_PS3;USE_FLOAT_REALS;NO_RVALUE_INT64;ENABLE_BC16;ENABLE_BC17;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)vendor/stb/ds;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|PS3'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;PLATFORM_PS3;USE_FLOAT_REALS;NO_RVALUE_INT64;ENABLE_BC16;ENABLE_BC17;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)vendor/stb/ds;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <Optimization>MaxSpeed</Optimization>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <!-- Core Files -->
+    <ClCompile Include="src\binary_reader.c" />
+    <ClCompile Include="src\data_win.c" />
+    <ClCompile Include="src\data_win_print.c" />
+    <ClCompile Include="src\debug_overlay.c" />
+    <ClCompile Include="src\gml_array.c" />
+    <ClCompile Include="src\gml_method.c" />
+    <ClCompile Include="src\ini.c" />
+    <ClCompile Include="src\input_recording.c" />
+    <ClCompile Include="src\instance.c" />
+    <ClCompile Include="src\json_reader.c" />
+    <ClCompile Include="src\json_writer.c" />
+    <ClCompile Include="src\noop_audio_system.c" />
+    <ClCompile Include="src\noop_file_system.c" />
+    <ClCompile Include="src\profiler.c" />
+    <ClCompile Include="src\runner.c" />
+    <ClCompile Include="src\runner_keyboard.c" />
+    <ClCompile Include="src\string_builder.c" />
+    <ClCompile Include="src\vm.c" />
+    <ClCompile Include="src\vm_builtins.c" />
+    <!-- PS3 Platform Files -->
+    <ClCompile Include="src\ps3\main.c" />
+    <ClCompile Include="src\ps3\ps3_file_system.c" />
+    <ClCompile Include="src\ps3\ps3_renderer.c" />
+    <ClCompile Include="src\ps3\stb_impl.c" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>
