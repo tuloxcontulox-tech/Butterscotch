@@ -11572,6 +11572,8 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "asset_get_index", builtin_asset_get_index);
     VM_registerBuiltin(ctx,"gpu_set_blendmode", builtin_gpu_set_blendmode);
     VM_registerBuiltin(ctx,"gpu_set_blendmode_ext", builtin_gpu_set_blendmode_ext);
+    VM_registerBuiltin(ctx,"draw_set_blend_mode", builtin_gpu_set_blendmode);
+    VM_registerBuiltin(ctx,"draw_set_blend_mode_ext", builtin_gpu_set_blendmode_ext);
     VM_registerBuiltin(ctx,"gpu_set_blendenable", builtin_gpu_set_blendenable);
     VM_registerBuiltin(ctx,"gpu_get_blendenable", builtin_gpu_get_blendenable);
     VM_registerBuiltin(ctx,"gpu_set_alphatestenable", builtin_gpu_set_alphatestenable);
