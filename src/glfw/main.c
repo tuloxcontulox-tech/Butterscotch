@@ -1159,6 +1159,7 @@ int main(int argc, char* argv[]) {
         globalInputRecording = InputRecording_createRecorder(args.recordInputsPath);
     }
     if (globalInputRecording != nullptr) {
+        globalInputRecording->filterDebugKeys = args.debug;
         installCrashHandlers();
     }
     shcopyFromTo(args.varReadsToBeTraced, runner->vmContext->varReadsToBeTraced);
