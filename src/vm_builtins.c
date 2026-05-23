@@ -4277,13 +4277,40 @@ static RValue builtin_sound_play(VMContext* ctx, RValue* args, MAYBE_UNUSED int3
     AudioSystem* audio = getAudioSystem(ctx);
     if (audio == nullptr) return RValue_makeReal(-1.0);
 
-    // Do not attempt to play "undefined" sounds (matches GameMaker-HTML5 behavior, and fixes random sound effects on room transitions in DELTARUNE Chapter 2)
+    // Do not attempt to play "undefined" sounds
     if (args[0].type == RVALUE_UNDEFINED)
         return RValue_makeReal(-1.0);
 
     int32_t soundIndex = RValue_toInt32(args[0]);
     int32_t instanceId = audio->vtable->playSound(audio, soundIndex, 10, false);
     return RValue_makeReal((GMLReal) instanceId);
+}
+
+// same as builtin_sound_play with loop enabled
+static RValue builtin_sound_loop(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {   
+    AudioSystem* audio = getAudioSystem(ctx);
+    if (audio == nullptr) return RValue_makeReal(-1.0);
+    
+    // Do not attempt to play "undefined" sounds
+    if (args[0].type == RVALUE_UNDEFINED)
+        return RValue_makeReal(-1.0);
+    
+    int32_t soundIndex = RValue_toInt32(args[0]);
+    int32_t instanceId = audio->vtable->playSound(audio, soundIndex, 10, true);
+    return RValue_makeReal((GMLReal) instanceId);
+}
+
+static RValue builtin_sound_volume(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {   
+    AudioSystem* audio = getAudioSystem(ctx);
+    if (audio == nullptr) return RValue_makeUndefined();
+    
+    int32_t soundIndex = RValue_toInt32(args[0]);
+    float volume = (float) RValue_toReal(args[1]);
+
+    // Set timeMs to 0 for immediate change
+    audio->vtable->setSoundGain(audio, soundIndex, volume, 0);
+    
+    return RValue_makeUndefined();
 }
 
 static RValue builtin_audio_play_sound(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
@@ -11318,6 +11345,8 @@ void VMBuiltins_registerAll(VMContext* ctx) {
         VM_registerBuiltin(ctx, "action_end_sound", builtin_audio_stop_sound);
         VM_registerBuiltin(ctx, "action_if_sound", builtin_audio_is_playing);
         VM_registerBuiltin(ctx, "sound_play", builtin_sound_play);
+        VM_registerBuiltin(ctx, "sound_loop", builtin_sound_loop);
+        VM_registerBuiltin(ctx, "sound_volume", builtin_sound_volume);
         VM_registerBuiltin(ctx, "sound_exists", builtin_audio_exists); // Replaced with audio_exists in GMS2
         VM_registerBuiltin(ctx, "sound_fade", builtin_audio_sound_gain);
         VM_registerBuiltin(ctx, "sound_global_volume", builtin_audio_master_gain);
