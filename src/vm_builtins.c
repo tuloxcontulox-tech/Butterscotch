@@ -253,7 +253,14 @@ static const BuiltinVarEntry BUILTIN_VAR_TABLE[] = {
     { "buffer_u64", BUILTIN_VAR_BUFFER_U64 },
     { "buffer_u8", BUILTIN_VAR_BUFFER_U8 },
     { "buffer_wrap", BUILTIN_VAR_BUFFER_WRAP },
+    { "current_day", BUILTIN_VAR_CURRENT_DAY },
+    { "current_hour", BUILTIN_VAR_CURRENT_HOUR },
+    { "current_minute", BUILTIN_VAR_CURRENT_MINUTE },
+    { "current_month", BUILTIN_VAR_CURRENT_MONTH },
+    { "current_second", BUILTIN_VAR_CURRENT_SECOND },
     { "current_time", BUILTIN_VAR_CURRENT_TIME },
+    { "current_weekday", BUILTIN_VAR_CURRENT_WEEKDAY },
+    { "current_year", BUILTIN_VAR_CURRENT_YEAR },
     { "debug_mode", BUILTIN_VAR_DEBUG_MODE },
     { "depth", BUILTIN_VAR_DEPTH },
     { "direction", BUILTIN_VAR_DIRECTION },
@@ -811,6 +818,25 @@ RValue VMBuiltins_getVariable(VMContext* ctx, int16_t builtinVarId, const char* 
             return RValue_makeReal((GMLReal) runner->backgroundColor);
 
         // Timing
+        case BUILTIN_VAR_CURRENT_DAY:
+        case BUILTIN_VAR_CURRENT_HOUR:
+        case BUILTIN_VAR_CURRENT_MINUTE:
+        case BUILTIN_VAR_CURRENT_MONTH:
+        case BUILTIN_VAR_CURRENT_SECOND:
+        case BUILTIN_VAR_CURRENT_WEEKDAY:
+        case BUILTIN_VAR_CURRENT_YEAR: {
+            time_t now = time(NULL);
+            struct tm *t = localtime(&now);
+            switch (builtinVarId) {
+                case BUILTIN_VAR_CURRENT_DAY:     return RValue_makeReal(t->tm_mday);
+                case BUILTIN_VAR_CURRENT_HOUR:    return RValue_makeReal(t->tm_hour);
+                case BUILTIN_VAR_CURRENT_MINUTE:  return RValue_makeReal(t->tm_min);
+                case BUILTIN_VAR_CURRENT_MONTH:   return RValue_makeReal(t->tm_mon + 1);
+                case BUILTIN_VAR_CURRENT_SECOND:  return RValue_makeReal(t->tm_sec);
+                case BUILTIN_VAR_CURRENT_WEEKDAY: return RValue_makeReal(t->tm_wday);
+                case BUILTIN_VAR_CURRENT_YEAR:    return RValue_makeReal(t->tm_year + 1900);
+            }
+        }
         case BUILTIN_VAR_CURRENT_TIME: {
             #ifdef _WIN32
             LARGE_INTEGER freq, counter;
@@ -1374,7 +1400,14 @@ void VMBuiltins_setVariable(VMContext* ctx, int16_t builtinVarId, const char* na
         case BUILTIN_VAR_BUFFER_FIXED ... BUILTIN_VAR_BUFFER_SEEK_END:
         case BUILTIN_VAR_ID:
         case BUILTIN_VAR_OBJECT_INDEX:
+        case BUILTIN_VAR_CURRENT_DAY:
+        case BUILTIN_VAR_CURRENT_HOUR:
+        case BUILTIN_VAR_CURRENT_MINUTE:
+        case BUILTIN_VAR_CURRENT_MONTH:
+        case BUILTIN_VAR_CURRENT_SECOND:
         case BUILTIN_VAR_CURRENT_TIME:
+        case BUILTIN_VAR_CURRENT_WEEKDAY:
+        case BUILTIN_VAR_CURRENT_YEAR:
         case BUILTIN_VAR_VIEW_CURRENT:
         case BUILTIN_VAR_PATH_INDEX:
         case BUILTIN_VAR_DEBUG_MODE:
