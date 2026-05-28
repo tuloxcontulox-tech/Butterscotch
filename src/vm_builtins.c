@@ -9371,11 +9371,11 @@ static RValue builtin_action_if_variable(VMContext* ctx, MAYBE_UNUSED RValue* ar
     }
 
     bool result;
-    if (op == LEGACY_DND_CMP_LT) result = diff < 0.0;
-    else if (op == LEGACY_DND_CMP_GT) result = diff > 0.0;
-    else if (op == LEGACY_DND_CMP_LTE) result = diff <= 0.0;
-    else if (op == LEGACY_DND_CMP_GTE) result = diff >= 0.0;
-    else result = diff == 0.0;
+    if (op == LEGACY_DND_CMP_LT) result = diff < 0.0f;
+    else if (op == LEGACY_DND_CMP_GT) result = diff > 0.0f;
+    else if (op == LEGACY_DND_CMP_LTE) result = diff <= 0.0f;
+    else if (op == LEGACY_DND_CMP_GTE) result = diff >= 0.0f;
+    else result = diff == 0.0f;
     return RValue_makeBool(result);
 }
 
