@@ -9885,6 +9885,11 @@ static RValue builtin_action_if_variable(VMContext* ctx, MAYBE_UNUSED RValue* ar
     return RValue_makeBool(result);
 }
 
+static RValue builtin_action_if(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
+    if (1 > argCount) return RValue_makeBool(false);
+    return RValue_makeBool(RValue_toBool(args[0]));
+}
+
 static RValue builtin_action_if_dice(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     if (1 > argCount) return RValue_makeBool(false);
 
@@ -9895,7 +9900,6 @@ static RValue builtin_action_if_dice(VMContext* ctx, MAYBE_UNUSED RValue* args, 
 
     return RValue_makeBool((rand() % probability) == 0);
 }
-
 
 static RValue builtin_action_set_score(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = ctx->runner;
@@ -13376,6 +13380,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "get_timer", builtin_get_timer);
     if (!isGMS2) {
         VM_registerBuiltin(ctx, "action_if_variable", builtin_action_if_variable);
+        VM_registerBuiltin(ctx, "action_if", builtin_action_if);
         VM_registerBuiltin(ctx, "action_if_dice", builtin_action_if_dice);
         VM_registerBuiltin(ctx, "action_set_alarm", builtin_action_set_alarm);
         VM_registerBuiltin(ctx, "action_set_score", builtin_action_set_score);
