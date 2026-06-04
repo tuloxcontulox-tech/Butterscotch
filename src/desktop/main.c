@@ -50,6 +50,13 @@
 #include "utils.h"
 #include "profiler.h"
 
+/* For SDL_main */
+#if defined(USE_SDL1)
+#include <SDL/SDL_main.h>
+#elif defined(USE_SDL2)
+#include <SDL2/SDL_main.h>
+#endif
+
 enum GraphicsAPI gfx;
 
 #if !defined(ENABLE_GLES) && (defined(ENABLE_MODERN_GL) || defined(ENABLE_LEGACY_GL))
@@ -344,7 +351,7 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
     args->loadType = DATAWINLOADTYPE_LOAD_IN_MEMORY_AHEAD_OF_TIME;
     // TODO: detect available driver features
     // at runtime to improve defaults.
-#if defined(ENABLE_MODERN_GL) && defined(USE_GLFW3)
+#if defined(ENABLE_MODERN_GL) && (defined(USE_GLFW3) || defined(USE_SDL2))
     args->renderer = "modern-gl";
 #elif defined(ENABLE_LEGACY_GL)
     args->renderer = "legacy-gl";
