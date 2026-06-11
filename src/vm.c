@@ -536,7 +536,9 @@ static inline bool tryFastVarRead(VMContext* ctx, int32_t instanceType, Variable
             Instance* inst = (Instance*) ctx->currentInstance;
             if (inst == nullptr) return false;
             RValue* slot = IntRValueHashMap_findSlot(&inst->selfVars, varDef->varID);
-            *out = (slot != nullptr) ? *slot : RValue_makeUndefined();
+            if (slot == nullptr)
+                return false;
+            *out = *slot;
             out->ownsReference = false;
             return true;
         }
@@ -558,7 +560,9 @@ static inline bool tryFastVarRead(VMContext* ctx, int32_t instanceType, Variable
             Instance* inst = (Instance*) ctx->otherInstance;
             if (inst == nullptr) return false;
             RValue* slot = IntRValueHashMap_findSlot(&inst->selfVars, varDef->varID);
-            *out = (slot != nullptr) ? *slot : RValue_makeUndefined();
+            if (slot == nullptr)
+                return false;
+            *out = *slot;
             out->ownsReference = false;
             return true;
         }
