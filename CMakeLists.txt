@@ -541,17 +541,26 @@ elseif(PLATFORM STREQUAL "ps3")
     if (NOT ENABLE_LEGACY_GL)
         message(FATAL_ERROR "PS3 requires legacy gl!")
     endif()
-    file(GLOB GL_SOURCES src/gl_common/*.c src/gl_legacy/*.c src/image/*.c vendor/ps3gl/*.c)
-    file(GLOB AL_SOURCES vendor/mojoal/mojoal.c)
+    file(GLOB GL_SOURCES src/gl_common/*.c src/gl_legacy/*.c src/image/*.c)
     file(GLOB DEBUG_FONT_SOURCES src/debug_font/*.c)
-    target_sources(butterscotch PRIVATE ${GL_SOURCES} ${AL_SOURCES} ${DEBUG_FONT_SOURCES})
+    target_sources(butterscotch PRIVATE ${GL_SOURCES} ${DEBUG_FONT_SOURCES})
     target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src/gl_legacy)
     target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src/image)
     target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src/debug_font)
-    target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/vendor/ps3gl)
-    target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/vendor/mojoal)
     target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src/ps3)
     target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src/gl_common)
+
+    # ps3gl
+    file(GLOB PS3GL_SOURCES vendor/ps3gl/*.c)
+    add_library(ps3gl STATIC ${PS3GL_SOURCES})
+    target_include_directories(ps3gl SYSTEM PUBLIC vendor/ps3gl)
+    target_compile_options(ps3gl PRIVATE -w)
+
+    # mojoal
+    add_library(mojoal STATIC vendor/mojoal/mojoal.c)
+    target_include_directories(mojoal SYSTEM PUBLIC vendor/mojoal)
+    target_compile_definitions(mojoal PRIVATE AL_LIBTYPE_STATIC)
+    target_compile_options(mojoal PRIVATE -w)
 
     # Butterscotch VM/interpreter profiler
     option(ENABLE_VM_GML_PROFILER "Enable Butterscotch VM/interpreter profiler" OFF)
@@ -591,14 +600,13 @@ elseif(PLATFORM STREQUAL "ps3")
 
     # Platform identifier for PS3-specific code paths
     add_compile_definitions(PLATFORM_PS3)
-    add_compile_definitions(IS_BIG_ENDIAN)
     add_compile_definitions(AL_LIBTYPE_STATIC)
 
     set(CMAKE_EXE_LINKER_FLAGS "-mhard-float -fmodulo-sched -Wl,--gc-sections -L$ENV{PS3DEV}/ppu/lib -L$ENV{PS3DEV}/portlibs/ppu/lib")
 
     find_package(SDL2 REQUIRED)
     target_include_directories(butterscotch PRIVATE ${SDL2_INCLUDE_DIRS})
-    target_link_libraries(butterscotch PRIVATE ${SDL2_LIBRARIES} m gcm_sys rsx sysutil io audio rt lv2 io audio bzip2 stb_ds sha1)
+    target_link_libraries(butterscotch PRIVATE ${SDL2_LIBRARIES} m gcm_sys rsx sysutil io audio rt lv2 io audio bzip2 stb_ds sha1 ps3gl mojoal)
 else()
     message(FATAL_ERROR "Unknown platform! ${PLATFORM}")
 endif()
