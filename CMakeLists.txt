@@ -337,6 +337,8 @@ elseif(PLATFORM STREQUAL "web-meta")
         OUTPUT_NAME "butterscotch-meta"
     )
 
+    target_link_libraries(butterscotch PRIVATE stb_ds)
+
     target_link_options(
             butterscotch
             PRIVATE
