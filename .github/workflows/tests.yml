@@ -43,4 +43,4 @@ jobs:
       - name: Run Butterscotch test suite
         working-directory: tests/Flowey
         run: |
-          ./gradlew --no-daemon run --args="--test-suite ${{ github.workspace }}/tests/tests.conf --butterscotch-path ${{ github.workspace }}/build/butterscotch"
+          xvfb-run -a ./gradlew --no-daemon run --args="--test-suite ${{ github.workspace }}/tests/tests.conf --butterscotch-path ${{ github.workspace }}/build/butterscotch"
