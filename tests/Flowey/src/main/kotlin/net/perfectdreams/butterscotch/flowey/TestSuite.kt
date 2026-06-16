@@ -9,6 +9,7 @@ data class TestSuite(
     @Serializable
     data class TestEntry(
         val name: String,
+        val commercialGame: Boolean = false,
         val butterscotchArgs: List<String>,
         val expectedStdoutOutput: List<List<String>> = listOf(),
         val expectedStderrOutput: List<List<String>> = listOf(),
