@@ -579,7 +579,7 @@ RValue VMBuiltins_getVariable(VMContext* ctx, Instance* inst, int16_t builtinVar
 
     // Structs: instance builtins are ordinary members.
     if (inst != nullptr && inst->objectIndex == STRUCT_OBJECT_INDEX && isInstanceScopedBuiltinVar(builtinVarId)) {
-        return VM_structGet(ctx, inst, name, arrayIndex);
+        return VM_structGetByVarName(ctx, inst, name, arrayIndex);
     }
 
     // In the past Butterscotch used cascading ifs for this, which in my opinion looked nicer AND GCC was converting the ifs into a jump table, so it was all well...

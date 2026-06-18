@@ -328,17 +328,11 @@ RValue VM_structGetByVarId(Instance* structInst, int32_t slotId, int32_t arrayIn
 
 // Plain member read on a struct.
 // Returns a weak view (or undefined when the member/element doesn't exist).
-RValue VM_structGet(VMContext* ctx, Instance* structInst, const char* name, int32_t arrayIndex) {
+RValue VM_structGetByVarName(VMContext* ctx, Instance* structInst, const char* name, int32_t arrayIndex) {
     requireMessageFormatted(__FILE__, __LINE__, structInst->objectIndex == STRUCT_OBJECT_INDEX, "Trying to use VM_structGet on a instance that isn't a struct! objectIndex=%d", structInst->objectIndex);
     ptrdiff_t nameSlot = shgeti(ctx->selfVarNameMap, (char*) name);
     if (nameSlot >= 0) {
-        RValue* slot = IntRValueHashMap_findSlot(&structInst->selfVars, ctx->selfVarNameMap[nameSlot].value);
-        if (slot != nullptr) {
-            if (arrayIndex >= 0) return GMLArray_getOnArrayRef(slot, arrayIndex);
-            RValue result = *slot;
-            result.ownsReference = false;
-            return result;
-        }
+        return VM_structGetByVarId(structInst, ctx->selfVarNameMap[nameSlot].value, arrayIndex);
     }
     return RValue_makeUndefined();
 }
