@@ -579,7 +579,7 @@ RValue VMBuiltins_getVariable(VMContext* ctx, Instance* inst, int16_t builtinVar
 
     // Structs: instance builtins are ordinary members.
     if (inst != nullptr && inst->objectIndex == STRUCT_OBJECT_INDEX && isInstanceScopedBuiltinVar(builtinVarId)) {
-        return VM_structGetByVarName(ctx, inst, name, arrayIndex);
+        return VM_structGetVariableByVarName(ctx, inst, name, arrayIndex);
     }
 
     // In the past Butterscotch used cascading ifs for this, which in my opinion looked nicer AND GCC was converting the ifs into a jump table, so it was all well...
@@ -3675,57 +3675,6 @@ static const char* variableTraceObjectName(VMContext* ctx, Instance* inst) {
 }
 #endif
 
-static RValue builtin_variable_global_exists(VMContext* ctx, RValue* args, int32_t argCount) {
-    if (1 > argCount || args[0].type != RVALUE_STRING) return RValue_makeReal(0.0);
-    const char* name = args[0].string;
-    ptrdiff_t idx = shgeti(ctx->globalVarNameMap, (char*) name);
-    if (0 > idx) return RValue_makeReal(0.0);
-    int32_t varID = ctx->globalVarNameMap[idx].value;
-    if (ctx->globalVarCount > (uint32_t) varID && ctx->globalVars[varID].type != RVALUE_UNDEFINED) {
-        return RValue_makeReal(1.0);
-    }
-    return RValue_makeReal(0.0);
-}
-
-static RValue builtin_variable_global_get(VMContext* ctx, RValue* args, int32_t argCount) {
-    if (1 > argCount || args[0].type != RVALUE_STRING) return RValue_makeUndefined();
-    const char* name = args[0].string;
-    ptrdiff_t idx = shgeti(ctx->globalVarNameMap, (char*) name);
-    if (0 > idx) return RValue_makeUndefined();
-    int32_t varID = ctx->globalVarNameMap[idx].value;
-    if (ctx->globalVarCount > (uint32_t) varID) {
-        RValue val = ctx->globalVars[varID];
-#ifdef ENABLE_VM_TRACING
-        VM_checkIfVariableShouldBeTracedAndLog(ctx, "global", nullptr, name, val, false, -1, -1, " (variable_global_get)");
-#endif
-        // Duplicate owned strings
-        if (val.type == RVALUE_STRING && val.ownsReference && val.string != nullptr) {
-            return RValue_makeOwnedString(safeStrdup(val.string));
-        }
-        // Return a weak view: the global slot retains ownership. The caller's Pop will incRef into the destination slot.
-        val.ownsReference = false;
-        return val;
-    }
-    return RValue_makeUndefined();
-}
-
-static RValue builtin_variable_global_set(VMContext* ctx, RValue* args, int32_t argCount) {
-    if (2 > argCount || args[0].type != RVALUE_STRING) return RValue_makeUndefined();
-    const char* name = args[0].string;
-    ptrdiff_t idx = shgeti(ctx->globalVarNameMap, (char*) name);
-    if (0 > idx) return RValue_makeUndefined();
-    int32_t varID = ctx->globalVarNameMap[idx].value;
-    if (ctx->globalVarCount > (uint32_t) varID) {
-#ifdef ENABLE_VM_TRACING
-        VM_checkIfVariableShouldBeTracedAndLog(ctx, "global", nullptr, name, args[1], true, -1, -1, " (variable_global_set)");
-#endif
-        RValue_free(&ctx->globalVars[varID]);
-        ctx->globalVars[varID] = RValue_makeIndependent(args[1]);
-    }
-    return RValue_makeUndefined();
-}
-
-// ===[ VARIABLE_INSTANCE ]===
 
 static void variableInstanceSetOn(VMContext* ctx, Instance* target, const char* name, RValue val, MAYBE_UNUSED const char* originBuiltin) {
 #ifdef ENABLE_VM_TRACING
@@ -3740,14 +3689,14 @@ static void variableInstanceSetOn(VMContext* ctx, Instance* target, const char* 
     }
 
     // Lookup varID by name from VARI (self scope)
-    ptrdiff_t slot = shgeti(ctx->selfVarNameMap, (char*) name);
+    ptrdiff_t slot = shgeti(ctx->varNameMap, (char*) name);
     if (0 > slot) {
         // Not on the slot, register manually
         int32_t dynamicallyAllocatedVarID = VM_getOrAllocateSelfVarID(ctx, name);
         Instance_setSelfVar(target, dynamicallyAllocatedVarID, val);
         return;
     }
-    Instance_setSelfVar(target, ctx->selfVarNameMap[slot].value, val);
+    Instance_setSelfVar(target, ctx->varNameMap[slot].value, val);
 }
 
 static RValue variableInstanceGetOn(VMContext* ctx, Instance* target, const char* name, MAYBE_UNUSED const char* originBuiltin) {
@@ -3765,9 +3714,9 @@ static RValue variableInstanceGetOn(VMContext* ctx, Instance* target, const char
         }
         return val;
     }
-    ptrdiff_t slot = shgeti(ctx->selfVarNameMap, (char*) name);
+    ptrdiff_t slot = shgeti(ctx->varNameMap, (char*) name);
     if (0 > slot) return RValue_makeUndefined();
-    RValue val = Instance_getSelfVar(target, ctx->selfVarNameMap[slot].value);
+    RValue val = Instance_getSelfVar(target, ctx->varNameMap[slot].value);
 #ifdef ENABLE_VM_TRACING
     char additional[48];
     snprintf(additional, sizeof(additional), " (%s)", originBuiltin);
@@ -3782,9 +3731,9 @@ static inline bool variableScopedMatches(Instance* inst, bool structOnly) {
 
 static bool variableInstanceExistsOn(VMContext* ctx, Instance* target, const char* name) {
     if (VMBuiltins_resolveBuiltinVarId(name) != BUILTIN_VAR_UNKNOWN) return true;
-    ptrdiff_t slot = shgeti(ctx->selfVarNameMap, (char*) name);
+    ptrdiff_t slot = shgeti(ctx->varNameMap, (char*) name);
     if (0 > slot) return false;
-    return IntRValueHashMap_contains(&target->selfVars, ctx->selfVarNameMap[slot].value);
+    return IntRValueHashMap_contains(&target->selfVars, ctx->varNameMap[slot].value);
 }
 
 static RValue variableScopedGet(VMContext* ctx, int32_t id, const char* name, bool structOnly, const char* originBuiltin) {
@@ -3837,6 +3786,8 @@ static bool variableScopedExists(VMContext* ctx, int32_t id, const char* name, b
         Instance* inst = hmget(runner->instancesById, id);
         if (inst != nullptr && variableScopedMatches(inst, structOnly)) return variableInstanceExistsOn(ctx, inst, name);
         return false;
+    } else if (id == INSTANCE_GLOBAL) {
+        return variableInstanceExistsOn(ctx, ctx->globalScopeInstance, name);
     }
 
     int32_t snapBase = Runner_pushInstancesOfObject(runner, id);
@@ -3852,6 +3803,24 @@ static bool variableScopedExists(VMContext* ctx, int32_t id, const char* name, b
     Runner_popInstanceSnapshot(runner, snapBase);
     return result;
 }
+
+static RValue builtin_variable_global_exists(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount || args[0].type != RVALUE_STRING) return RValue_makeBool(false);
+    return RValue_makeBool(variableScopedExists(ctx, INSTANCE_GLOBAL, args[0].string, false));
+}
+
+static RValue builtin_variable_global_get(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount || args[0].type != RVALUE_STRING) return RValue_makeUndefined();
+    return variableScopedGet(ctx, INSTANCE_GLOBAL, args[0].string, false, "variable_global_get");
+}
+
+static RValue builtin_variable_global_set(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (2 > argCount || args[0].type != RVALUE_STRING) return RValue_makeUndefined();
+    variableScopedSet(ctx, INSTANCE_GLOBAL, args[0].string, args[1], false, "variable_instance_set");
+    return RValue_makeUndefined();
+}
+
+// ===[ VARIABLE_INSTANCE ]===
 
 static RValue builtin_variable_instance_get(VMContext* ctx, RValue* args, int32_t argCount) {
     if (2 > argCount || args[1].type != RVALUE_STRING) return RValue_makeUndefined();
@@ -3884,6 +3853,41 @@ static RValue builtin_variable_struct_set(VMContext* ctx, RValue* args, int32_t 
 static RValue builtin_variable_struct_exists(VMContext* ctx, RValue* args, int32_t argCount) {
     if (2 > argCount || args[1].type != RVALUE_STRING) return RValue_makeBool(false);
     return RValue_makeBool(variableScopedExists(ctx, RValue_toInt32(args[0]), args[1].string, true));
+}
+
+static RValue builtin_struct_get_names(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) return RValue_makeUndefined();
+
+    GMLArray* array = GMLArray_create(0);
+
+    Instance* targetInstance;
+    if (args[0].type == RVALUE_STRUCT) {
+        RValue varStruct = args[0];
+        targetInstance = varStruct.structInst;
+    } else {
+        // Contrary to its name, this also works with instances too
+        int32_t targetInstanceId = RValue_toInt32(args[0]);
+        if (targetInstanceId == INSTANCE_GLOBAL) {
+            targetInstance = ctx->globalScopeInstance;
+        } else {
+            targetInstance = VM_findInstanceByTarget(ctx, targetInstanceId);
+        }
+    }
+
+    if (targetInstance != nullptr) {
+        repeat(targetInstance->selfVars.capacity, i) {
+            IntRValueEntry entryOnTheVarStruct = targetInstance->selfVars.entries[i];
+
+            if (entryOnTheVarStruct.key != INT_RVALUE_HASHMAP_EMPTY_KEY) {
+                char* name = VM_getVariableNameByVarId(ctx, entryOnTheVarStruct.key);
+
+                // We don't need to worry about making it owned because the name is owned by the Runner itself
+                GMLArray_add(array, RValue_makeString(requireNotNullMessage(name, "Trying to set a variable that we do not know the name of! Bug?")));
+            }
+        }
+    }
+
+    return RValue_makeArray(array);
 }
 
 // ===[ METHOD ]===
@@ -7580,16 +7584,10 @@ static RValue builtin_instance_create_layer(VMContext* ctx, RValue* args, int32_
         if (varStruct.type == RVALUE_STRUCT) {
             repeat(varStruct.structInst->selfVars.capacity, i) {
                 IntRValueEntry entryOnTheVarStruct = varStruct.structInst->selfVars.entries[i];
-                RValue target = VM_structGetByVarId(varStruct.structInst, entryOnTheVarStruct.key, -1);
+                RValue target = VM_structGetVariableByVarId(varStruct.structInst, entryOnTheVarStruct.key, -1);
 
                 if (entryOnTheVarStruct.key != INT_RVALUE_HASHMAP_EMPTY_KEY) {
-                    // We need to get the name of the VarId
-                    char* name = nullptr;
-                    repeat(shlen(ctx->selfVarNameMap), j) {
-                        if (ctx->selfVarNameMap[j].value == entryOnTheVarStruct.key) {
-                            name = ctx->selfVarNameMap[j].key;
-                        }
-                    }
+                    char* name = VM_getVariableNameByVarId(ctx, entryOnTheVarStruct.key);
 
                     variableInstanceSetOn(
                         ctx,
@@ -15224,6 +15222,8 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "variable_struct_set", builtin_variable_struct_set);
     VM_registerBuiltin(ctx, "variable_struct_get", builtin_variable_struct_get);
     VM_registerBuiltin(ctx, "variable_struct_exists", builtin_variable_struct_exists);
+    VM_registerBuiltin(ctx, "struct_get_names", builtin_struct_get_names);
+    VM_registerBuiltin(ctx, "variable_instance_get_names", builtin_struct_get_names); // I couldn't find any noticeable different behavior when testing this
 
     // Script
     VM_registerBuiltin(ctx, "script_execute", builtin_script_execute);

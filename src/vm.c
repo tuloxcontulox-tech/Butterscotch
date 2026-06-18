@@ -241,8 +241,6 @@ static uint32_t resolveFuncOperand(const uint8_t* extraData) {
 //   * grow-on-write past the current length
 //   * transfer ownership of "val" into arr->data[index], freeing whatever was there before.
 //
-// Forward declarations
-static Instance* findInstanceByTarget(VMContext* ctx, int32_t target);
 
 // CoW fork for array writes (BC17+): when the slot's array is owned by a different scope, replace it with a uniquely-owned clone stamped with the current owner,
 // so the upcoming store (Pop for one dimensional arrays, or the chain's eventual BREAK_POPAF for multi-dimensional arrays) can write in place.
@@ -307,14 +305,24 @@ static GMLArray* VM_arraySetWithCoW(VMContext* ctx, RValue* slot, int32_t index,
 
 // Creates a copy of "name"
 int32_t VM_getOrAllocateSelfVarID(VMContext* ctx, const char* name) {
-    ptrdiff_t slot = shgeti(ctx->selfVarNameMap, name);
-    if (slot >= 0) return ctx->selfVarNameMap[slot].value;
+    ptrdiff_t slot = shgeti(ctx->varNameMap, name);
+    if (slot >= 0) return ctx->varNameMap[slot].value;
     int32_t id = ctx->nextDynamicSelfVarID++;
-    shput(ctx->selfVarNameMap, safeStrdup(name), id);
+    shput(ctx->varNameMap, safeStrdup(name), id);
     return id;
 }
 
-RValue VM_structGetByVarId(Instance* structInst, int32_t slotId, int32_t arrayIndex) {
+char* VM_getVariableNameByVarId(VMContext* ctx, int32_t varId) {
+    char* name = nullptr;
+    repeat(shlen(ctx->varNameMap), j) {
+        if (ctx->varNameMap[j].value == varId) {
+            name = ctx->varNameMap[j].key;
+        }
+    }
+    return name;
+}
+
+RValue VM_structGetVariableByVarId(Instance* structInst, int32_t slotId, int32_t arrayIndex) {
     requireMessageFormatted(__FILE__, __LINE__, structInst->objectIndex == STRUCT_OBJECT_INDEX, "Trying to use VM_structGetByVarId on a instance that isn't a struct! objectIndex=%d", structInst->objectIndex);
     RValue* slot = IntRValueHashMap_findSlot(&structInst->selfVars, slotId);
     if (slot != nullptr) {
@@ -328,11 +336,11 @@ RValue VM_structGetByVarId(Instance* structInst, int32_t slotId, int32_t arrayIn
 
 // Plain member read on a struct.
 // Returns a weak view (or undefined when the member/element doesn't exist).
-RValue VM_structGetByVarName(VMContext* ctx, Instance* structInst, const char* name, int32_t arrayIndex) {
+RValue VM_structGetVariableByVarName(VMContext* ctx, Instance* structInst, const char* name, int32_t arrayIndex) {
     requireMessageFormatted(__FILE__, __LINE__, structInst->objectIndex == STRUCT_OBJECT_INDEX, "Trying to use VM_structGet on a instance that isn't a struct! objectIndex=%d", structInst->objectIndex);
-    ptrdiff_t nameSlot = shgeti(ctx->selfVarNameMap, (char*) name);
+    ptrdiff_t nameSlot = shgeti(ctx->varNameMap, (char*) name);
     if (nameSlot >= 0) {
-        return VM_structGetByVarId(structInst, ctx->selfVarNameMap[nameSlot].value, arrayIndex);
+        return VM_structGetVariableByVarId(structInst, ctx->varNameMap[nameSlot].value, arrayIndex);
     }
     return RValue_makeUndefined();
 }
@@ -442,33 +450,6 @@ static Variable* resolveVarDef(VMContext* ctx, uint32_t varRef) {
     return varDef;
 }
 
-static uint32_t growGlobalSlotSparse(VMContext* ctx, int32_t varKey) {
-    uint32_t slot = IntIntHashMap_getOrInsertSequential(&ctx->globalVarsSlotMap, varKey);
-    if (slot >= ctx->globalVarCount) {
-        if (slot >= ctx->globalVarCapacity) {
-            uint32_t newCap = ctx->globalVarCapacity == 0 ? 64 : ctx->globalVarCapacity * 2;
-            while (slot >= newCap) newCap *= 2;
-            ctx->globalVars = safeRealloc(ctx->globalVars, newCap * sizeof(RValue));
-            ctx->globalVarCapacity = newCap;
-        }
-        for (uint32_t i = ctx->globalVarCount; slot >= i; i++) {
-            ctx->globalVars[i] = RValue_makeUndefined();
-        }
-        ctx->globalVarCount = slot + 1;
-    }
-    return slot;
-}
-
-// Maps a global variable key to its slot in globalVars[]
-static inline uint32_t resolveGlobalSlot(VMContext* ctx, int32_t varKey) {
-    if (IS_WAD15_OR_HIGHER(ctx)) {
-        // WAD Version 15+ provides the key directly in the data.win
-        return (uint32_t) varKey;
-    } else {
-        return growGlobalSlotSparse(ctx, varKey);
-    }
-}
-
 // Maps a GML local's varID to its slot position in the current code's localVars[] array.
 //
 // BC15/16: varIDs for locals are already sequential slot indices (0, 1, 2, ...), so we return the varID unchanged.
@@ -498,7 +479,7 @@ static uint32_t resolveLocalSlot(VMContext* ctx, int32_t varID) {
 // Finds an instance by target value.
 // target >= INSTANCE_ID_BASE: instance ID (find specific instance, including recently-destroyed-but-not-cleaned-up-yet ones so GML code can read properties of an instance just after instance_destroy within the same step).
 // target >= 0 && target < INSTANCE_ID_BASE: object index (find first ACTIVE instance of that object, checking parent chains)
-static Instance* findInstanceByTarget(VMContext* ctx, int32_t target) {
+Instance* VM_findInstanceByTarget(VMContext* ctx, int32_t target) {
     Runner* runner = (Runner*) ctx->runner;
 
     if (target >= INSTANCE_ID_BASE) {
@@ -540,9 +521,12 @@ static inline bool tryFastVarRead(VMContext* ctx, int32_t instanceType, Variable
             return true;
         }
         case INSTANCE_GLOBAL: {
-            uint32_t globalSlot = resolveGlobalSlot(ctx, varDef->varID);
-            require(ctx->globalVarCount > globalSlot);
-            *out = ctx->globalVars[globalSlot];
+            Instance* inst = (Instance*) ctx->globalScopeInstance;
+            if (inst == nullptr) return false;
+            RValue* slot = IntRValueHashMap_findSlot(&inst->selfVars, varDef->varID);
+            if (slot == nullptr)
+                return false;
+            *out = *slot;
             out->ownsReference = false;
             return true;
         }
@@ -692,7 +676,7 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
     // Resolve target instance for object/instance references (instanceType >= 0)
     Instance* targetInstance = (Instance*) ctx->currentInstance;
     if (instanceType >= 0) {
-        targetInstance = findInstanceByTarget(ctx, instanceType);
+        targetInstance = VM_findInstanceByTarget(ctx, instanceType);
         if (targetInstance == nullptr) {
             const char* varTypeName = varTypeToString((varRef >> 24) & 0xF8);
             if (instanceType < INSTANCE_ID_BASE && (uint32_t) instanceType < ctx->dataWin->objt.count) {
@@ -756,9 +740,9 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
         // Structs aren't real game instances, but structs CAN store fields with the same names as built-ins.
         // So we'll check the self variables FIRST before checking for built-ins.
         if (targetInstance != nullptr && targetInstance->objectIndex == STRUCT_OBJECT_INDEX) {
-            ptrdiff_t nameSlot = shgeti(ctx->selfVarNameMap, (char*) varDef->name);
+            ptrdiff_t nameSlot = shgeti(ctx->varNameMap, (char*) varDef->name);
             if (nameSlot >= 0) {
-                int32_t structVarID = ctx->selfVarNameMap[nameSlot].value;
+                int32_t structVarID = ctx->varNameMap[nameSlot].value;
                 RValue value;
                 if (tryReadInstanceVarOrStatic(ctx, targetInstance, structVarID, &access, &value))
                     return value;
@@ -778,6 +762,10 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
         return result;
     }
 
+    if (instanceType == INSTANCE_GLOBAL) {
+        targetInstance = ctx->globalScopeInstance;
+    }
+
     // Resolve the variable's scalar slot pointer for the target scope. Array-valued vars live inline as RVALUE_ARRAY in the same slot.
     // GMLArray_getOnArrayRef handles the array indirection when access.isArray, VM_arraySetWithCoW handles CoW forking when writing.
     RValue* slot = nullptr;
@@ -788,13 +776,8 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
             slot = &ctx->localVars[localSlot];
             break;
         }
-        case INSTANCE_GLOBAL: {
-            uint32_t globalSlot = resolveGlobalSlot(ctx, varDef->varID);
-            require(ctx->globalVarCount > globalSlot);
-            slot = &ctx->globalVars[globalSlot];
-            break;
-        }
         case INSTANCE_SELF:
+        case INSTANCE_GLOBAL:
         default: {
             Instance* inst = targetInstance;
             if (inst == nullptr) {
@@ -890,17 +873,12 @@ static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t 
 #endif
                 return;
             }
+            case INSTANCE_SELF:
             case INSTANCE_GLOBAL: {
-                uint32_t globalSlot = resolveGlobalSlot(ctx, varDef->varID);
-                require(ctx->globalVarCount > globalSlot);
-                RValue_writeIntoSlotStealingOwnershipOrCopying(&ctx->globalVars[globalSlot], val);
-#ifdef ENABLE_VM_TRACING
-                VM_checkIfVariableShouldBeTracedAndLog(ctx, "global", nullptr, varDef->name, ctx->globalVars[globalSlot], true, -1, -1, "");
-#endif
-                return;
-            }
-            case INSTANCE_SELF: {
                 Instance* inst = (Instance*) ctx->currentInstance;
+                if (instanceType == INSTANCE_GLOBAL)
+                    inst = ctx->globalScopeInstance;
+
                 if (inst != nullptr) {
                     Instance_setSelfVar(inst, varDef->varID, val);
 #ifdef ENABLE_VM_TRACING
@@ -990,7 +968,7 @@ static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t 
     // Resolve target instance for instance ID references (instanceType >= INSTANCE_ID_BASE) or special types
     Instance* targetInstance = (Instance*) ctx->currentInstance;
     if (instanceType >= 0) {
-        targetInstance = findInstanceByTarget(ctx, instanceType);
+        targetInstance = VM_findInstanceByTarget(ctx, instanceType);
         if (targetInstance == nullptr) {
             const char* varTypeName = varTypeToString((varRef >> 24) & 0xF8);
             char* valAsString = RValue_toString(val);
@@ -1046,15 +1024,13 @@ static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t 
             slot = &ctx->localVars[localSlot];
             break;
         }
-        case INSTANCE_GLOBAL: {
-            uint32_t globalSlot = resolveGlobalSlot(ctx, varDef->varID);
-            require(ctx->globalVarCount > globalSlot);
-            slot = &ctx->globalVars[globalSlot];
-            break;
-        }
         case INSTANCE_SELF:
+        case INSTANCE_GLOBAL:
         default: {
             Instance* inst = targetInstance;
+            if (instanceType == INSTANCE_GLOBAL)
+                inst = ctx->globalScopeInstance;
+
             if (inst == nullptr) {
                 const char* varTypeName = varTypeToString((varRef >> 24) & 0xF8);
                 char* valAsString = RValue_toString(val);
@@ -1090,20 +1066,13 @@ static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t 
             RValue_writeIntoSlotStealingOwnershipOrCopying(&ctx->localVars[localSlot], val);
             return;
         }
-        case INSTANCE_GLOBAL: {
-            uint32_t globalSlot = resolveGlobalSlot(ctx, varDef->varID);
-            require(ctx->globalVarCount > globalSlot);
-            RValue* dest = &ctx->globalVars[globalSlot];
-            RValue_writeIntoSlotStealingOwnershipOrCopying(dest, val);
-#ifdef ENABLE_VM_TRACING
-            VM_checkIfVariableShouldBeTracedAndLog(ctx, "global", nullptr, varDef->name, *dest, true, -1, -1, "");
-#endif
-            return;
-        }
         case INSTANCE_SELF:
+        case INSTANCE_GLOBAL:
         default: {
             // Self or object/instance reference - use sparse hashmap
             Instance* inst = targetInstance;
+            if (instanceType == INSTANCE_GLOBAL)
+                inst = ctx->globalScopeInstance;
             Instance_setSelfVar(inst, varDef->varID, val);
 #ifdef ENABLE_VM_TRACING
             {
@@ -1193,15 +1162,11 @@ static void handlePush(VMContext* ctx, uint32_t instr, const uint8_t* extraData,
                         slot = &ctx->localVars[localSlot];
                         break;
                     }
-                    case INSTANCE_GLOBAL: {
-                        uint32_t globalSlot = resolveGlobalSlot(ctx, varDef->varID);
-                        require(ctx->globalVarCount > globalSlot);
-                        slot = &ctx->globalVars[globalSlot];
-                        break;
-                    }
                     case INSTANCE_SELF:
-                    case INSTANCE_OTHER: {
-                        Instance* inst = (scope == INSTANCE_OTHER && ctx->otherInstance != nullptr)
+                    case INSTANCE_OTHER:
+                    case INSTANCE_GLOBAL: {
+                        Instance* inst = scope == INSTANCE_GLOBAL ? ctx->globalScopeInstance
+                            : (scope == INSTANCE_OTHER && ctx->otherInstance != nullptr)
                             ? (Instance*) ctx->otherInstance
                             : (Instance*) ctx->currentInstance;
                         require(inst != nullptr);
@@ -1211,7 +1176,7 @@ static void handlePush(VMContext* ctx, uint32_t instr, const uint8_t* extraData,
                     default: {
                         // Negative pseudo-scopes not handled above resolve to the current instance, mirroring handlePushBltn.
                         // Positive scopes are real instance IDs resolved by lookup.
-                        Instance* inst = (0 > scope) ? (Instance*) ctx->currentInstance : findInstanceByTarget(ctx, scope);
+                        Instance* inst = (0 > scope) ? (Instance*) ctx->currentInstance : VM_findInstanceByTarget(ctx, scope);
                         if (inst == nullptr) {
                             fprintf(stderr, "VM: ARRAYPUSHAF: no instance for scope %d varID=%d\n", scope, varDef->varID);
                             abort();
@@ -1303,7 +1268,7 @@ static void handlePushBltn(VMContext* ctx, uint32_t instr, const uint8_t* extraD
         } else if (scope == INSTANCE_OTHER && ctx->otherInstance != nullptr) {
             inst = (Instance*) ctx->otherInstance;
         } else if (scope >= 0) {
-            inst = findInstanceByTarget(ctx, scope);
+            inst = VM_findInstanceByTarget(ctx, scope);
         } else {
             inst = (Instance*) ctx->currentInstance;
         }
@@ -1430,7 +1395,7 @@ static void handlePop(VMContext* ctx, uint8_t type1, uint8_t type2, uint32_t var
                     Runner_popInstanceSnapshot(runner, snapBase);
                 } else {
                     // Instance ID reference
-                    Instance* target = findInstanceByTarget(ctx, instanceType);
+                    Instance* target = VM_findInstanceByTarget(ctx, instanceType);
                     if (target != nullptr) {
                         VMBuiltins_setVariable(ctx, target, varDef->builtinVarId, varDef->name, val, arrayIndex);
 #ifdef ENABLE_VM_TRACING
@@ -1455,17 +1420,12 @@ static void handlePop(VMContext* ctx, uint8_t type1, uint8_t type2, uint32_t var
                     slot = &ctx->localVars[localSlot];
                     break;
                 }
-                case INSTANCE_GLOBAL: {
-                    uint32_t globalSlot = resolveGlobalSlot(ctx, varDef->varID);
-                    require(ctx->globalVarCount > globalSlot);
-                    slot = &ctx->globalVars[globalSlot];
-                    break;
-                }
                 case INSTANCE_SELF:
+                case INSTANCE_GLOBAL:
                 default: {
                     struct Instance* inst = (struct Instance*) ctx->currentInstance;
                     if (instanceType >= 0) {
-                        inst = findInstanceByTarget(ctx, instanceType);
+                        inst = VM_findInstanceByTarget(ctx, instanceType);
                         if (inst == nullptr) {
                             const char* varTypeName = varTypeToString(varType);
                             char* valAsString = RValue_toString(val);
@@ -1480,6 +1440,8 @@ static void handlePop(VMContext* ctx, uint8_t type1, uint8_t type2, uint32_t var
                         }
                     } else if (instanceType == INSTANCE_OTHER && ctx->otherInstance != nullptr) {
                         inst = (Instance*) ctx->otherInstance;
+                    } else if (instanceType == INSTANCE_GLOBAL) {
+                        inst = ctx->globalScopeInstance;
                     }
                     if (inst == nullptr) {
                         RValue_free(&val);
@@ -2140,7 +2102,7 @@ static void handleCallV(VMContext* ctx, uint32_t instr) {
     int32_t targetInstance = (boundInstance > 0) ? boundInstance : RValue_toInt32(instance);
     Instance* savedSelf = ctx->currentInstance;
     if (targetInstance != INSTANCE_SELF && targetInstance != 0) {
-        Instance* target = findInstanceByTarget(ctx, targetInstance);
+        Instance* target = VM_findInstanceByTarget(ctx, targetInstance);
         if (target != nullptr) ctx->currentInstance = target;
     }
 
@@ -2945,24 +2907,9 @@ static RValue executeLoop(VMContext* ctx) {
             }
             case OP_PUSHGLB: {
                 uint32_t varRef = resolveVarOperand(extraData);
-                // Globals are not ALWAYS non-builtin (varID >= 0), some games may use the deprecated global builtins (like "score") with PUSHGLB.
-                // So due to that, we'll take the slow path if it is a builtin variable.
-                // The native runner does NOT handle global arrays from this path, so we don't need to care about them.
-                Variable* varDef = resolveVarDef(ctx, varRef);
-                if (varDef->varID == VARIABLE_BUILTIN) {
-                    RValue val = resolveVariableRead(ctx, INSTANCE_GLOBAL, varRef);
-                    stackPushTyped(ctx, val, GML_TYPE_VARIABLE);
-                    break;
-                }
-                // Inline the read straight from globalVars[].
-                uint32_t globalSlot = resolveGlobalSlot(ctx, varDef->varID);
-                require(ctx->globalVarCount > globalSlot);
-                RValue val = ctx->globalVars[globalSlot];
-                val.ownsReference = false;
+                // TODO: Re-add fast-path here!
+                RValue val = resolveVariableRead(ctx, INSTANCE_GLOBAL, varRef);
                 stackPushTyped(ctx, val, GML_TYPE_VARIABLE);
-#ifdef ENABLE_VM_TRACING
-                VM_checkIfVariableShouldBeTracedAndLog(ctx, "global", nullptr, varDef->name, val, false, -1, -1, "");
-#endif
                 break;
             }
             case OP_PUSHBLTN:
@@ -3463,13 +3410,6 @@ VMContext* VM_create(DataWin* dataWin) {
         }
     }
 
-    ctx->globalVarCount = maxGlobalVarID;
-    ctx->globalVarCapacity = maxGlobalVarID;
-    ctx->globalVars = maxGlobalVarID == 0 ? nullptr : safeCalloc(maxGlobalVarID, sizeof(RValue));
-    repeat(maxGlobalVarID, i) {
-        ctx->globalVars[i].type = RVALUE_UNDEFINED;
-    }
-
     ctx->currentCodeIndex = -1;
 
     // V17+ static initialization tracking
@@ -3492,28 +3432,16 @@ VMContext* VM_create(DataWin* dataWin) {
         }
     }
 
-    // Build globalVarNameMap: varName -> varID for global variables
-    ctx->globalVarNameMap = nullptr;
-    forEach(Variable, v2, dataWin->vari.variables, dataWin->vari.variableCount) {
-        if (v2->instanceType == INSTANCE_GLOBAL && v2->varID >= 0) {
-            ptrdiff_t existing = shgeti(ctx->globalVarNameMap, (char*) v2->name);
-            if (0 > existing) {
-                shput(ctx->globalVarNameMap, (char*) v2->name, v2->varID);
-            }
-        }
-    }
-
     // Build selfVarNameMap: varName -> varID for self/instance-scoped variables.
-    ctx->selfVarNameMap = nullptr;
+    ctx->varNameMap = nullptr;
     int32_t maxSelfVarID = 0;
     forEach(Variable, variable, dataWin->vari.variables, dataWin->vari.variableCount) {
-        if (variable->varID >= 0 && (variable->instanceType == INSTANCE_SELF || 0 > variable->instanceType)) {
-            ptrdiff_t existing = shgeti(ctx->selfVarNameMap, (char*) variable->name);
-            if (0 > existing) {
-                shput(ctx->selfVarNameMap, (char*) safeStrdup(variable->name), variable->varID);
-            }
-            if (variable->varID > maxSelfVarID) maxSelfVarID = variable->varID;
+        ptrdiff_t existing = shgeti(ctx->varNameMap, (char*) variable->name);
+        if (0 > existing) {
+            shput(ctx->varNameMap, (char*) safeStrdup(variable->name), variable->varID);
         }
+        if (variable->varID > maxSelfVarID)
+            maxSelfVarID = variable->varID;
     }
     ctx->nextDynamicSelfVarID = maxSelfVarID + 1;
 
@@ -3583,18 +3511,12 @@ VMContext* VM_create(DataWin* dataWin) {
         }
     }
 
-    fprintf(stderr, "VM: Initialized with %u global vars, sparse self vars (hashmap), %u functions mapped\n", ctx->globalVarCount, (uint32_t) shlen(ctx->codeIndexByName));
+    fprintf(stderr, "VM: Initialized with %u functions mapped\n", (uint32_t) shlen(ctx->codeIndexByName));
 
     return ctx;
 }
 
 void VM_reset(VMContext* ctx) {
-    // Reset all global variables to undefined
-    repeat(ctx->globalVarCount, i) {
-        RValue_free(&ctx->globalVars[i]);
-        ctx->globalVars[i].type = RVALUE_UNDEFINED;
-    }
-
     // Reset stack
     ctx->stack.top = 0;
 
@@ -3641,7 +3563,11 @@ void VM_reset(VMContext* ctx) {
         ctx->staticStructs = safeCalloc(ctx->dataWin->code.count, sizeof(Instance*));
     }
 
-    fprintf(stderr, "VM: Reset complete (%u global vars cleared)\n", ctx->globalVarCount);
+    // Create the instance used for "self" in GLOB scripts
+    Instance_free(ctx->globalScopeInstance);
+    ctx->globalScopeInstance = Instance_create(0, STRUCT_OBJECT_INDEX, 0, 0);
+
+    fprintf(stderr, "VM: Reset complete\n");
 }
 
 static CodeLocals* resolveCodeLocals(VMContext* ctx, const char* codeName) {
@@ -4408,17 +4334,12 @@ void VM_free(VMContext* ctx) {
     ctx->opcodeRValueTypeCounts = nullptr;
 #endif
 
-    // Free global vars array itself
-    free(ctx->globalVars);
-    IntIntHashMap_free(&ctx->globalVarsSlotMap);
-
     // Free hash maps
     shfree(ctx->codeIndexByName);
-    shfree(ctx->globalVarNameMap);
-    repeat(shlen(ctx->selfVarNameMap), i) {
-        free(ctx->selfVarNameMap[i].key);
+    repeat(shlen(ctx->varNameMap), i) {
+        free(ctx->varNameMap[i].key);
     }
-    shfree(ctx->selfVarNameMap);
+    shfree(ctx->varNameMap);
     repeat(shlen(ctx->codeLocalsMap), i) {
         free(ctx->codeLocalsMap[i].key);
     }
@@ -4472,6 +4393,9 @@ void VM_free(VMContext* ctx) {
         free(ctx->codeLocalsSlotMaps);
         ctx->codeLocalsSlotMaps = nullptr;
     }
+
+    // Free the global scope instance
+    Instance_free(ctx->globalScopeInstance);
 
 #ifndef PLATFORM_PS2
     free(ctx);

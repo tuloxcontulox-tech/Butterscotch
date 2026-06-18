@@ -1895,10 +1895,6 @@ void Runner_reset(Runner* runner) {
         runner->instancesByExactObject = safeCalloc(runner->dataWin->objt.count, sizeof(Instance**));
     }
 
-    // Create the instance used for "self" in GLOB scripts
-    Instance_free(runner->globalScopeInstance);
-    runner->globalScopeInstance = Instance_create(0, STRUCT_OBJECT_INDEX, 0, 0);
-
     // Reset builtin function state
     runner->mpPotMaxrot = 30.0;
     runner->mpPotStep = 10.0;
@@ -2410,7 +2406,7 @@ void Runner_initFirstRoom(Runner* runner) {
 
     // Run global init scripts with the global scope instance as "self"
     // In GMS 2.3+ (BC17), GLOB scripts store function declarations on "self" via Pop.v.v
-    runner->vmContext->currentInstance = runner->globalScopeInstance;
+    runner->vmContext->currentInstance = runner->vmContext->globalScopeInstance;
     repeat(dataWin->glob.count, i) {
         int32_t codeId = dataWin->glob.codeIds[i];
         if (codeId >= 0 && dataWin->code.count > (uint32_t) codeId) {
@@ -2419,10 +2415,9 @@ void Runner_initFirstRoom(Runner* runner) {
             RValue_free(&result);
         }
     }
-    runner->vmContext->currentInstance = nullptr;
 
     // Run extension init scripts
-    runner->vmContext->currentInstance = runner->globalScopeInstance;
+    runner->vmContext->currentInstance =  runner->vmContext->globalScopeInstance;
     repeat(dataWin->extn.count, e) {
         Extension* ext = &dataWin->extn.extensions[e];
         repeat(ext->fileCount, f) {
@@ -3940,7 +3935,6 @@ void Runner_beginFrame(
 
 void Runner_dumpState(Runner* runner) {
     DataWin* dataWin = runner->dataWin;
-    VMContext* vm = runner->vmContext;
     int32_t instanceCount = (int32_t) arrlen(runner->instances);
 
     printf("=== Frame %d State Dump ===\n", runner->frameCount);
@@ -4025,31 +4019,27 @@ void Runner_dumpState(Runner* runner) {
 
     // Global variables (non-array)
     printf("\n=== Global Variables ===\n");
-    repeat(dataWin->vari.variableCount, varIdx) {
-        Variable* var = &dataWin->vari.variables[varIdx];
-        if (var->instanceType != INSTANCE_GLOBAL || var->varID < 0) continue;
-        if ((uint32_t) var->varID >= vm->globalVarCount) continue;
-        RValue val = vm->globalVars[var->varID];
-        if (val.type == RVALUE_UNDEFINED) continue;
 
-        char* valStr = RValue_toStringFancy(val);
-        printf("  %s = %s\n", var->name, valStr);
-        free(valStr);
-    }
+    repeat(runner->vmContext->globalScopeInstance->selfVars.capacity, i) {
+        IntRValueEntry entryOnTheVarStruct = runner->vmContext->globalScopeInstance->selfVars.entries[i];
+        RValue target = VM_structGetVariableByVarId(runner->vmContext->globalScopeInstance, entryOnTheVarStruct.key, -1);
 
-    // Global arrays: scan globalVars slots for RVALUE_ARRAY entries
-    repeat(dataWin->vari.variableCount, varIdx) {
-        Variable* var = &dataWin->vari.variables[varIdx];
-        if (var->instanceType != INSTANCE_GLOBAL || var->varID < 0) continue;
-        if ((uint32_t) var->varID >= vm->globalVarCount) continue;
-        RValue val = vm->globalVars[var->varID];
-        if (val.type != RVALUE_ARRAY || val.array == nullptr) continue;
-        repeat(GMLArray_length1D(val.array), ai) {
-            RValue* cell = GMLArray_slot(val.array, ai);
-            if (cell == nullptr || cell->type == RVALUE_UNDEFINED) continue;
-            char* innerStr = RValue_toStringFancy(*cell);
-            printf("  %s[%d] = %s\n", var->name, (int) ai, innerStr);
-            free(innerStr);
+        if (entryOnTheVarStruct.key != INT_RVALUE_HASHMAP_EMPTY_KEY) {
+            char* name = VM_getVariableNameByVarId(runner->vmContext, entryOnTheVarStruct.key);
+
+            if (target.type == RVALUE_ARRAY) {
+                repeat(GMLArray_length1D(target.array), ai) {
+                    RValue* cell = GMLArray_slot(target.array, ai);
+                    if (cell == nullptr || cell->type == RVALUE_UNDEFINED) continue;
+                    char* innerStr = RValue_toStringFancy(*cell);
+                    printf("  %s[%d] = %s\n", name, (int) ai, innerStr);
+                    free(innerStr);
+                }
+            }
+
+            char* valStr = RValue_toStringTyped(target);
+            printf("  %s = %s\n", name, valStr);
+            free(valStr);
         }
     }
 
@@ -4114,7 +4104,6 @@ static void writeRValueJson(JsonWriter* w, RValue val) {
 
 char* Runner_dumpStateJson(Runner* runner) {
     DataWin* dataWin = runner->dataWin;
-    VMContext* vm = runner->vmContext;
     int32_t instanceCount = (int32_t) arrlen(runner->instances);
 
     JsonWriter w = JsonWriter_create();
@@ -4270,16 +4259,19 @@ char* Runner_dumpStateJson(Runner* runner) {
     // Global variables (non-array)
     JsonWriter_key(&w, "globalVariables");
     JsonWriter_beginObject(&w);
-    repeat(dataWin->vari.variableCount, varIdx) {
-        Variable* var = &dataWin->vari.variables[varIdx];
-        if (var->instanceType != INSTANCE_GLOBAL || var->varID < 0) continue;
-        if ((uint32_t) var->varID >= vm->globalVarCount) continue;
-        RValue val = vm->globalVars[var->varID];
-        if (val.type == RVALUE_UNDEFINED) continue;
 
-        JsonWriter_key(&w, var->name);
-        writeRValueJson(&w, val);
+    repeat(runner->vmContext->globalScopeInstance->selfVars.capacity, i) {
+        IntRValueEntry entryOnTheVarStruct = runner->vmContext->globalScopeInstance->selfVars.entries[i];
+        RValue target = VM_structGetVariableByVarId(runner->vmContext->globalScopeInstance, entryOnTheVarStruct.key, -1);
+
+        if (entryOnTheVarStruct.key != INT_RVALUE_HASHMAP_EMPTY_KEY) {
+            char* name = VM_getVariableNameByVarId(runner->vmContext, entryOnTheVarStruct.key);
+
+            JsonWriter_key(&w, name);
+            writeRValueJson(&w, target);
+        }
     }
+
     JsonWriter_endObject(&w);
     JsonWriter_endObject(&w);
 
@@ -4345,6 +4337,5 @@ void Runner_free(Runner* runner) {
     RunnerKeyboard_free(runner->keyboard);
     RunnerGamepad_free(runner->gamepads);
     RunnerMouse_free(runner->mouse);
-    Instance_free(runner->globalScopeInstance);
     free(runner);
 }

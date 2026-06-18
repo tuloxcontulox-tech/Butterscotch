@@ -518,11 +518,6 @@ struct Runner {
     Drawable* cachedDrawables; // stb_ds array
     bool drawableListStructureDirty;
     bool drawableListSortDirty;
-    // Dummy instance to serve as "self" during GLOB script execution
-    // In WAD version 17+, global init scripts store method values on "self" via Pop.v.v
-    // The real runner uses a persistent YYObjectBase for this, the YYObjectBase is a "parent" of Instance
-    // For now, we'll use a dummy Instance with objectIndex = STRUCT_OBJECT_INDEX as a hack
-    Instance* globalScopeInstance;
     // Struct instances created by @@NewGMLObject@@. Reuses Instance with objectIndex=STRUCT_OBJECT_INDEX.
     // Tracked separately so event/step/draw iteration over runner->instances stays clean.
     Instance** structInstances;
