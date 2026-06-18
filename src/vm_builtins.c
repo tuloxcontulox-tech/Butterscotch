@@ -1247,10 +1247,6 @@ void VMBuiltins_setVariable(VMContext* ctx, Instance* inst, int16_t builtinVarId
     Runner* runner = requireNotNullMessage(ctx->runner, "VM: setVariable called but no runner!");
     requireNotNull(runner);
 
-    if (inst->objectIndex == STRUCT_OBJECT_INDEX) {
-        fprintf(stderr, "Trying to set variable %s %s\n", name, RValue_toStringTyped(val));
-    }
-
     // Structs: instance builtins are ordinary members.
     if (inst != nullptr && inst->objectIndex == STRUCT_OBJECT_INDEX && isInstanceScopedBuiltinVar(builtinVarId)) {
         VM_structSet(ctx, inst, name, val, arrayIndex);
