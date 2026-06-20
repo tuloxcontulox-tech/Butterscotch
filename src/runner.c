@@ -1107,6 +1107,8 @@ static void applyFreeCamera(Runner* runner, int32_t* viewX, int32_t* viewY, int3
 
 void Runner_drawViews(Runner* runner, int32_t gameW, int32_t gameH, bool debugShowCollisionMasks) {
     Renderer* renderer = runner->renderer;
+    renderer->vtable->clearScreen(renderer, runner->drawBackgroundColor ? runner->backgroundColor : 0, 1.0f);
+
     bool anyViewRendered = false;
 
     bool viewsEnabled = runner->viewsEnabled;

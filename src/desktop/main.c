@@ -1603,29 +1603,6 @@ int main(int argc, char* argv[]) {
                 platformGetMousePos(&mx, &my);
                 Runner_updateMousePosition(runner, winW, winH, mx, my);
 
-                // Clear FBO with room background color
-#ifdef ENABLE_SW_RENDERER
-                if (gfx == SOFTWARE) {
-                    if (runner->drawBackgroundColor)
-                        SWRenderer_clearFrameBuffer(renderer, runner->backgroundColor);
-                    else
-                        SWRenderer_clearFrameBuffer(renderer, 0);
-                }
-#endif
-#if defined(ENABLE_LEGACY_GL) || defined(ENABLE_MODERN_GL)
-                if (gfx == MODERN_GL || gfx == LEGACY_GL) {
-                    if (runner->drawBackgroundColor) {
-                        int rInt = BGR_R(runner->backgroundColor);
-                        int gInt = BGR_G(runner->backgroundColor);
-                        int bInt = BGR_B(runner->backgroundColor);
-                        glClearColor(rInt / 255.0f, gInt / 255.0f, bInt / 255.0f, 1.0f);
-                    } else
-                        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-
-                    glClear(GL_COLOR_BUFFER_BIT);
-                }
-#endif
-
                 Runner_drawViews(runner, gameW, gameH, debugShowCollisionMasks);
                 renderer->vtable->endFrameInit(renderer);
                 Runner_drawPost(runner, fbWidth, fbHeight);
