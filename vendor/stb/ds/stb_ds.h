@@ -514,7 +514,7 @@ extern void * stbds_shmode_func(size_t elemsize, int mode);
 
 #if !defined(__cplusplus)
 // This causes issues with old compilers, (GCC 3.0, Clang 1.1, and maybe more), and all it does
-// is allow the stb functions to work on rvalues, which we don't do anywhere in the codebase.
+// is allow the stb_ds functions to work on rvalues, which we don't do anywhere in the codebase.
 // I don't feel like figuring out the oldest version of every compiler this works on and writing
 // a huge conditional, so just disable it entirely.
 //#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
