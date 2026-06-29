@@ -44,6 +44,10 @@ jobs:
         env:
           COMMERCIAL_GAMES_URL: ${{ secrets.COMMERCIAL_GAMES_URL }}
         run: |
+          if [ -z "$COMMERCIAL_GAMES_URL" ]; then
+            echo "COMMERCIAL_GAMES_URL is empty, skipping download..."
+            exit 0
+          fi
           games=(
             undertale-ptbr-winpack
             underfavela
