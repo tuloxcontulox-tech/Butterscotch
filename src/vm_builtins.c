@@ -13216,7 +13216,7 @@ static RValue builtin_layer_sprite_blend(VMContext* ctx, RValue* args, MAYBE_UNU
     int32_t id = RValue_toInt32(args[0]);
     RuntimeLayerElement* el = Runner_findLayerElementById(runner, id, nullptr);
     if (isValidLayerSpriteElement(el))
-        el->spriteElement->blend = RValue_toBool(args[1]);
+        el->blend = RValue_toBool(args[1]);
     return RValue_makeUndefined();
 }
 
