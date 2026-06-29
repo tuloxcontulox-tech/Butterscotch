@@ -30,7 +30,7 @@ void PS3Overlay_init(void) {
 
     // Convert the 8bpp atlas into RGBA
     uint8_t* rgba = (uint8_t*) malloc((size_t) (DEBUGFONT_ATLAS_W * DEBUGFONT_ATLAS_H * 4));
-    if (rgba == nullptr) {
+    if (rgba == NULL) {
         fprintf(stderr, "PS3Overlay: failed to allocate %d bytes for the font atlas\n", DEBUGFONT_ATLAS_W * DEBUGFONT_ATLAS_H * 4);
         return;
     }
@@ -80,14 +80,14 @@ void PS3Overlay_toggleDebugOverlay(MAYBE_UNUSED Runner* runner) {
 }
 
 static const DebugFontGlyphEntry* lookupGlyph(uint8_t c) {
-    if (DEBUGFONT_FIRST_CP > c || c > DEBUGFONT_LAST_CP) return nullptr;
+    if (DEBUGFONT_FIRST_CP > c || c > DEBUGFONT_LAST_CP) return NULL;
     return &debugFontGlyphs[c - DEBUGFONT_FIRST_CP];
 }
 
 // Draws a string at (x, y) using the bound font texture.
 // Assumes the caller has set up an ortho projection in pixel space, bound the font texture, and configured glColor4ub.
 static void drawText(float x, float y, float scale, const char* text) {
-    if (text == nullptr) return;
+    if (text == NULL) return;
     int32_t len = (int32_t) strlen(text);
 
     float cursorY = y;
@@ -101,7 +101,7 @@ static void drawText(float x, float y, float scale, const char* text) {
             glBegin(GL_QUADS);
             repeat((uint32_t) lineLen, j) {
                 const DebugFontGlyphEntry* g = lookupGlyph((uint8_t) text[lineStart + (int32_t) j]);
-                if (g == nullptr) continue;
+                if (g == NULL) continue;
 
                 if (g->w > 0 && g->h > 0) {
                     float qx0 = pen + (float) g->xoffset * scale;
@@ -134,13 +134,13 @@ void PS3Overlay_drawDebugOverlay(const Runner* runner, float tickMs, float stepM
     if (!gOverlay.initialized) return;
     if (gOverlay.state == STATS_DISABLED) return;
 
-    const char* roomName = runner->currentRoom != nullptr && runner->currentRoom->name != nullptr ? runner->currentRoom->name : "?";
+    const char* roomName = runner->currentRoom != NULL && runner->currentRoom->name != NULL ? runner->currentRoom->name : "?";
 
     char debugText[384];
     snprintf(debugText, sizeof(debugText),
         "Room: %s\nTick: %.2fms\nStep: %.2fms\nDraw: %.2fms\nAudio: %.2fms\nRoom Speed: %u\nInstances: %d\nStructs: %d",
         roomName, (double) tickMs, (double) stepMs, (double) drawMs, (double) audioMs,
-        runner->currentRoom != nullptr ? runner->currentRoom->speed : 0,
+        runner->currentRoom != NULL ? runner->currentRoom->speed : 0,
         (int) arrlen(runner->instances), (int) arrlen(runner->structInstances)
     );
 
@@ -184,7 +184,7 @@ void PS3Overlay_drawDebugOverlay(const Runner* runner, float tickMs, float stepM
         gOverlay.profilerFramesInWindow++;
         if (gOverlay.profilerFramesInWindow >= PROFILER_WINDOW_FRAMES) {
             char* profilerReport = Profiler_createReport(runner->vmContext->profiler, 25, gOverlay.profilerFramesInWindow);
-            if (profilerReport != nullptr) {
+            if (profilerReport != NULL) {
                 snprintf(gOverlay.profilerOverlayText, sizeof(gOverlay.profilerOverlayText), "%s", profilerReport);
                 free(profilerReport);
             }
