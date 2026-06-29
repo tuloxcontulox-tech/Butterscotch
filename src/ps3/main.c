@@ -225,13 +225,13 @@ int main(int argc, char* argv[]) {
 #endif
 
     // Initialize the file system
-    char* dataWinDir = nullptr;
+    char* dataWinDir = NULL;
     {
         const char* lastSlash = strrchr(dataWinPath, '/');
         const char* lastBackslash = strrchr(dataWinPath, '\\');
-        if (lastBackslash != nullptr && (lastSlash == nullptr || lastBackslash > lastSlash))
+        if (lastBackslash != NULL && (lastSlash == NULL || lastBackslash > lastSlash))
             lastSlash = lastBackslash;
-        if (lastSlash != nullptr) {
+        if (lastSlash != NULL) {
             size_t len = (size_t) (lastSlash - dataWinPath + 1);
             dataWinDir = (char *)safeMalloc(len + 1);
             memcpy(dataWinDir, dataWinPath, len);
@@ -436,7 +436,7 @@ int main(int argc, char* argv[]) {
     // Cleanup
     PS3Overlay_deinit();
     runner->audioSystem->vtable->destroy(runner->audioSystem);
-    runner->audioSystem = nullptr;
+    runner->audioSystem = NULL;
     renderer->vtable->destroy(renderer);
 
     Runner_free(runner);

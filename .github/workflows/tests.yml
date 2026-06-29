@@ -40,10 +40,17 @@ jobs:
         run: sudo apt-get install -y xvfb
 
       - name: Download Commercial Games
+        id: download-commercial-games
         if: env.DOWNLOAD_COMMERCIAL_GAMES == 'true'
         env:
           COMMERCIAL_GAMES_URL: ${{ secrets.COMMERCIAL_GAMES_URL }}
         run: |
+          if [ -z "$COMMERCIAL_GAMES_URL" ]; then
+            echo "COMMERCIAL_GAMES_URL is empty, skipping download..."
+            echo "skipped=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "skipped=false" >> $GITHUB_OUTPUT
           games=(
             undertale-ptbr-winpack
             underfavela
@@ -61,7 +68,11 @@ jobs:
       - name: Run Butterscotch test suite
         working-directory: tests/Flowey
         run: |
-          xvfb-run -a ./gradlew --no-daemon run --args="--test-suite ${{ github.workspace }}/tests/tests.conf --butterscotch-path ${{ github.workspace }}/build/butterscotch --skip-commercial-games=${{ env.DOWNLOAD_COMMERCIAL_GAMES != 'true' }}"
+          SKIP_COMMERCIAL_GAMES="false"
+          if [ "${{ env.DOWNLOAD_COMMERCIAL_GAMES }}" != "true" ] || [ "${{ steps.download-commercial-games.outputs.skipped }}" == "true" ]; then
+            SKIP_COMMERCIAL_GAMES="true"
+          fi
+          xvfb-run -a ./gradlew --no-daemon run --args="--test-suite ${{ github.workspace }}/tests/tests.conf --butterscotch-path ${{ github.workspace }}/build/butterscotch --skip-commercial-games=$SKIP_COMMERCIAL_GAMES"
 
       - name: Upload test screenshots
         if: always()          # the test step exits 1 on failure; run regardless
